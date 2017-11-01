@@ -120,12 +120,14 @@ if __name__ == "__main__":
     # Embeddings parameters
     args.add_argument(command="--image", name="image", help="Output image", default=None, required=False,
                       extended=False)
-    args.add_argument(command="--voc-size", name="voc_size", help="Vocabulary size", default=5000, required=True,
+    args.add_argument(command="--voc-size", name="voc_size", help="Vocabulary size", type=int, default=5000,
+                      required=True,
                       extended=False)
-    args.add_argument(command="--fig-size", name="fig_size", help="Figure size (pixels)", default=1024.0, extended=False)
-    args.add_argument(command="--count-limit-display", name="count_limit_display",
+    args.add_argument(command="--fig-size", name="fig_size", help="Figure size (pixels)", type=float, default=1024.0,
+                      extended=False)
+    args.add_argument(command="--count-limit-display", name="count_limit_display", type=int,
                       help="Lower limit of word count to display a word", default=50, required=False, extended=False)
-    args.add_argument(command="--min-count", name="min_count",
+    args.add_argument(command="--min-count", name="min_count", type=int,
                       help="Minimum token count to be in the final embeddings", default=100, required=False,
                       extended=False)
 
@@ -160,7 +162,7 @@ if __name__ == "__main__":
         args.description,
         args.get_space(),
         args.n_samples,
-        args.k,
+        1,
         verbose=args.verbose
     )
 
@@ -180,10 +182,9 @@ if __name__ == "__main__":
         input_sparsity = space['input_sparsity']
         spectral_radius = space['spectral_radius']
         state_gram = space['state_gram']
-        model_type = space['w2e_model']
-        model_direction = space['model_direction']
-        print(space)
-        continue
+        model_type = space['w2e_model'][0][0]
+        model_direction = space['model_direction'][0][0]
+
         # Choose the right tokenizer
         tokenizer = nsNLP.tokenization.NLTKTokenizer()
 
@@ -227,61 +228,33 @@ if __name__ == "__main__":
             # For each directory
             cont_add = True
             token_count = 0
-            for subdirectory in os.listdir(args.dataset):
+            for filename in os.listdir(args.dataset):
+                # File path
+                file_path = os.path.join(args.dataset, filename)
+
                 # Directory path
-                directory_path = os.path.join(args.dataset, subdirectory)
+                xp.write(u"\t\t\tAdding file {}".format(file_path), log_level=3)
 
-                # Is DIR
-                if os.path.isdir(directory_path):
-                    # Directory path
-                    xp.write(u"\t\t\tEntering directory {}".format(directory_path), log_level=3)
+                # Open file
+                text_content = io.open(file_path, 'r', encoding='utf-8').read()
 
-                    # List file
-                    for filename in os.listdir(directory_path):
-                        file_path = os.path.join(directory_path, filename)
+                # Try to add
+                try:
+                    word2echo_model.add(tokenizer(text_content))
+                except nsNLP.esn_models.converters.OneHotVectorFullException:
+                    xp.write(u"\t\t\tOne-hot vector representation is full!", log_level=3)
+                    cont_add = False
+                    break
+                    pass
+                # end try
 
-                        # Directory path
-                        xp.write(u"\t\t\t\tAdding file {}".format(file_path), log_level=4)
+                # Display
+                xp.write(u"\t\t\t\tVocabulary size : {}".format(word2echo_model.voc_size), log_level=4)
+                xp.write(u"\t\t\t\tNumber of tokens : {}".format(word2echo_model.token_count), log_level=4)
 
-                        # Open file
-                        text_content = io.open(file_path, 'r', encoding='utf-8').read()
-
-                        # For each line
-                        for line in text_content.split(u"\n"):
-                            if line != u"#" * 100 and len(line) > 1:
-                                # Try to add
-                                try:
-                                    word2echo_model.add(tokenizer(line))
-                                except nsNLP.esn_models.converters.OneHotVectorFullException:
-                                    xp.write(u"\t\t\t\tOne-hot vector representation is full!", log_level=4)
-                                    cont_add = False
-                                    break
-                                    pass
-                                # end try
-
-                                # Display
-                                if word2echo_model.token_count - token_count > 100000:
-                                    xp.write(u"\t\t\t\tVocabulary size : {}".format(word2echo_model.voc_size), log_level=4)
-                                    xp.write(u"\t\t\t\tNumber of tokens : {}".format(word2echo_model.token_count), log_level=4)
-                                # end if
-
-                                # Count tokens
-                                if args.dataset_size != -1 and word2echo_model.token_count > args.dataset_size:
-                                    cont_add = False
-                                    break
-                                # end if
-                            # end if
-                        # end for
-
-                        # Word counts and voc size
-                        xp.write(u"\t\t\t\tVocabulary size : {}".format(word2echo_model.voc_size), log_level=4)
-                        xp.write(u"\t\t\t\tNumber of tokens : {}".format(word2echo_model.token_count), log_level=4)
-
-                        # Continue
-                        if not cont_add:
-                            break
-                        # end if
-                    # end for
+                # Count tokens
+                if args.dataset_size != -1 and word2echo_model.token_count > args.dataset_size:
+                    cont_add = False
                 # end if
 
                 # Continue
@@ -290,21 +263,31 @@ if __name__ == "__main__":
                 # end if
             # end for
 
+            # Word counts and voc size
+            xp.write(u"\t\t\t\tFinal vocabulary size : {}".format(word2echo_model.voc_size), log_level=4)
+            xp.write(u"\t\t\t\tFinal number of tokens : {}".format(word2echo_model.token_count), log_level=4)
+
             # Extract word embeddings
-            xp.write(u"\t\tExtracting word embeddings", log_level=2)
+            xp.write(u"\t\t\tExtracting word embeddings", log_level=3)
             word2echo_model.extract()
 
             # Export word embeddings
-            word_embeddings = word2echo_model.extract()
+            word_embeddings = word2echo_model.export_embeddings()
+            xp.write(u"\t\t\tWord embeddings vocabulary size: {}".format(word_embeddings.voc_size), log_level=3)
 
             # Clean
-            word_embeddings.clean('count', 100)
+            word_embeddings.clean('count', 2)
+            """for word in word_embeddings.voc:
+                print(u"{} : {}".format(word, word_embeddings.get(word, 'count')))
+            # end for"""
 
             # Measure performance
-            linear_positioning = questions_words.linear_positioning(word_embeddings)
+            positioning, poss = questions_words.positioning(word_embeddings, func='inv')
+            xp.write(u"\t\t\tLinear positioning: {}".format(positioning), log_level=3)
+            xp.write(u"\t\t\tPositionings: {}".format(poss), log_level=3)
 
             # Add to result
-            xp.add_result(linear_positioning)
+            xp.add_result(positioning)
 
             # Last space
             last_space = space
@@ -318,5 +301,5 @@ if __name__ == "__main__":
     # end for
 
     # Save experiment results
-    xp.save()
+    #xp.save()
 # end if
