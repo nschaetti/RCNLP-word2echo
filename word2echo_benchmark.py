@@ -79,6 +79,30 @@ def get_changed_params(new_space, last_space):
 # end get_changed_params
 
 
+# Create directory
+def create_directories(output_directory, xp_name):
+    """
+    Create image directory
+    :return:
+    """
+    # Directories
+    image_directory = os.path.join(output_directory, xp_name, "images")
+    words_directory = os.path.join(output_directory, xp_name, "words")
+
+    # Create if does not exists
+    if not os.path.exists(image_directory):
+        os.mkdir(image_directory)
+    # end if
+
+    # Create if does not exists
+    if not os.path.exists(words_directory):
+        os.mkdir(words_directory)
+    # end if
+
+    return image_directory, words_directory
+# end create_directories
+
+
 ####################################################
 # Main function
 ####################################################
@@ -118,15 +142,13 @@ if __name__ == "__main__":
                       extended=True, default="both")
 
     # Embeddings parameters
-    args.add_argument(command="--image", name="image", help="Output image", default=None, required=False,
-                      extended=False)
     args.add_argument(command="--voc-size", name="voc_size", help="Vocabulary size", type=int, default=5000,
                       required=True,
                       extended=False)
     args.add_argument(command="--fig-size", name="fig_size", help="Figure size (pixels)", type=float, default=1024.0,
                       extended=False)
-    args.add_argument(command="--count-limit-display", name="count_limit_display", type=int,
-                      help="Lower limit of word count to display a word", default=50, required=False, extended=False)
+    args.add_argument(command="--top-words", name="top_words", type=int,
+                      help="Number of top words (by count) to display in the wordnet picture", default=100, required=False, extended=False)
     args.add_argument(command="--min-count", name="min_count", type=int,
                       help="Minimum token count to be in the final embeddings", default=100, required=False,
                       extended=False)
@@ -162,9 +184,13 @@ if __name__ == "__main__":
         args.description,
         args.get_space(),
         args.n_samples,
-        1,
-        verbose=args.verbose
+        questions_words.size,
+        verbose=args.verbose,
+        nan=True
     )
+
+    # Create image directory
+    image_directory, words_directory = create_directories(args.output, args.name)
 
     # W index
     w_index = 0
@@ -199,11 +225,14 @@ if __name__ == "__main__":
             # Changed parameter
             changed_params = get_changed_params(space, last_space)
 
+            # Description
+            desc_info = u"{}-{}".format(space, n)
+
             # Generate a new W if necessary
             if change_w(changed_params) or not args.keep_w:
                 xp.write(u"\t\tGenerating new W matrix", log_level=2)
                 w = nsNLP.esn_models.ESNTextClassifier.w(rc_size=reservoir_size, rc_w_sparsity=w_sparsity)
-                xp.save_object(u"w_{}".format(w_index), w, info=u"{}".format(space))
+                xp.save_object(u"w_{}".format(w_index), w, info=desc_info)
             # end if
 
             # Set sample
@@ -275,31 +304,52 @@ if __name__ == "__main__":
             word_embeddings = word2echo_model.export_embeddings()
             xp.write(u"\t\t\tWord embeddings vocabulary size: {}".format(word_embeddings.voc_size), log_level=3)
 
+            # Save word embeddings object
+            xp.save_object(u"word_embeddings" + unicode(w_index), word_embeddings, desc_info)
+
             # Clean
-            word_embeddings.clean('count', 2)
-            """for word in word_embeddings.voc:
-                print(u"{} : {}".format(word, word_embeddings.get(word, 'count')))
-            # end for"""
+            word_embeddings.clean('count', args.min_count)
+
+            # Export image of top 100 words
+            word_embeddings.wordnet('count',
+                                    os.path.join(image_directory, u"wordnet_TSNE_" + unicode(w_index) + u".png"),
+                                    n_words=args.top_words,
+                                    fig_size=args.fig_size, reduction='TSNE', info=desc_info)
+            word_embeddings.wordnet('count',
+                                    os.path.join(image_directory, u"wordnet_PCA_" + unicode(w_index) + u".png"),
+                                    n_words=args.top_words,
+                                    fig_size=args.fig_size, reduction='PCA', info=desc_info)
+
+            # Export list of words
+            word_embeddings.wordlist(os.path.join(words_directory, u"wordlist" + unicode(w_index) + u".csv"))
 
             # Measure performance
-            positioning, poss = questions_words.positioning(word_embeddings, func='inv')
-            xp.write(u"\t\t\tLinear positioning: {}".format(positioning), log_level=3)
-            xp.write(u"\t\t\tPositionings: {}".format(poss), log_level=3)
+            positioning, poss, ratio = questions_words.positioning(word_embeddings, func='inv')
+            xp.write(u"\t\t\tPositioning: {}".format(positioning), log_level=3)
+            #xp.write(u"\t\t\tPositionings: {}".format(poss), log_level=3)
+            xp.write(u"\t\t\tRatio: {}".format(ratio), log_level=3)
 
-            # Add to result
-            xp.add_result(positioning)
+            # Save positioning as a fold
+            for index, pos in enumerate(poss):
+                xp.set_fold_state(index)
+                if index == len(poss)-1:
+                    xp.add_result(pos, last_fold=True)
+                else:
+                    xp.add_result(pos)
+                # end if
+            # end for
 
             # Last space
             last_space = space
 
             # Delete classifier
             del word2echo_model
-        # end for
 
-        # W index
-        w_index += 1
+            # W index
+            w_index += 1
+        # end for
     # end for
 
     # Save experiment results
-    #xp.save()
+    xp.save()
 # end if
