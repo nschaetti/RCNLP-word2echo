@@ -143,8 +143,7 @@ if __name__ == "__main__":
 
     # Embeddings parameters
     args.add_argument(command="--voc-size", name="voc_size", help="Vocabulary size", type=int, default=5000,
-                      required=True,
-                      extended=False)
+                      required=True, extended=True)
     args.add_argument(command="--fig-size", name="fig_size", help="Figure size (pixels)", type=float, default=1024.0,
                       extended=False)
     args.add_argument(command="--top-words", name="top_words", type=int,
@@ -210,6 +209,7 @@ if __name__ == "__main__":
         state_gram = space['state_gram']
         model_type = space['w2e_model'][0][0]
         model_direction = space['model_direction'][0][0]
+        voc_size = int(space['voc_size'])
 
         # Choose the right tokenizer
         tokenizer = nsNLP.tokenization.NLTKTokenizer()
@@ -248,7 +248,7 @@ if __name__ == "__main__":
                 rc_input_sparsity=input_sparsity,
                 rc_w_sparsity=w_sparsity,
                 w=w,
-                voc_size=args.voc_size,
+                voc_size=voc_size,
                 state_gram=state_gram,
                 model_type=model_type,
                 direction=model_direction
