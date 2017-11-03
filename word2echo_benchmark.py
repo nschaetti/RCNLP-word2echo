@@ -151,6 +151,7 @@ if __name__ == "__main__":
     args.add_argument(command="--min-count", name="min_count", type=int,
                       help="Minimum token count to be in the final embeddings", default=100, required=False,
                       extended=False)
+    args.add_argument(command="--pass", name="pass", type=str, help="Number of passes", extended=True, default="1")
 
     # Experiment output parameters
     args.add_argument(command="--name", name="name", type=str, help="Experiment's name", extended=False, required=True)
@@ -191,6 +192,10 @@ if __name__ == "__main__":
     # Create image directory
     image_directory, words_directory = create_directories(args.output, args.name)
 
+    # Empty one-hot converter and embeddings
+    converter = None
+    word_embeddings = None
+
     # W index
     w_index = 0
 
@@ -210,6 +215,7 @@ if __name__ == "__main__":
         model_type = space['w2e_model'][0][0]
         model_direction = space['model_direction'][0][0]
         voc_size = int(space['voc_size'])
+        passes = int(space['pass'])
 
         # Choose the right tokenizer
         tokenizer = nsNLP.tokenization.NLTKTokenizer()
@@ -238,6 +244,16 @@ if __name__ == "__main__":
             # Set sample
             xp.set_sample_state(n)
 
+            # First run or voc_size changed
+            if converter is None or 'voc_size' in changed_params:
+                converter = nsNLP.esn_models.OneHotConverter(voc_size=voc_size)
+            # end if
+
+            # If first pass, reset word embeddings
+            if passes == 0:
+                word_embeddings = None
+            # end if
+
             # Create ESN text classifier
             word2echo_model = nsNLP.esn_models.Word2Echo.create\
             (
@@ -251,7 +267,9 @@ if __name__ == "__main__":
                 voc_size=voc_size,
                 state_gram=state_gram,
                 model_type=model_type,
-                direction=model_direction
+                direction=model_direction,
+                converter=converter,
+                word_embeddings=word_embeddings
             )
 
             # For each directory
@@ -326,7 +344,6 @@ if __name__ == "__main__":
             # Measure performance
             positioning, poss, ratio = questions_words.positioning(word_embeddings, func='inv')
             xp.write(u"\t\t\tPositioning: {}".format(positioning), log_level=3)
-            #xp.write(u"\t\t\tPositionings: {}".format(poss), log_level=3)
             xp.write(u"\t\t\tRatio: {}".format(ratio), log_level=3)
 
             # Save positioning as a fold
