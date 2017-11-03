@@ -140,6 +140,8 @@ if __name__ == "__main__":
     args.add_argument(command="--model-direction", name="model_direction", type=str,
                       help="Model direction (lr, rl, both)",
                       extended=True, default="both")
+    args.add_argument(command="--gamma", name="gamma", type=str, help="Gamma parameter for echo2word model", extended=True,
+                      default="1")
 
     # Embeddings parameters
     args.add_argument(command="--voc-size", name="voc_size", help="Vocabulary size", type=int, default=5000,
@@ -151,7 +153,7 @@ if __name__ == "__main__":
     args.add_argument(command="--min-count", name="min_count", type=int,
                       help="Minimum token count to be in the final embeddings", default=100, required=False,
                       extended=False)
-    args.add_argument(command="--pass", name="pass", type=str, help="Number of passes", extended=True, default="1")
+    args.add_argument(command="--pass", name="pass", type=str, help="Number of passes", extended=True, default="0")
 
     # Experiment output parameters
     args.add_argument(command="--name", name="name", type=str, help="Experiment's name", extended=False, required=True)
@@ -216,6 +218,7 @@ if __name__ == "__main__":
         model_direction = space['model_direction'][0][0]
         voc_size = int(space['voc_size'])
         passes = int(space['pass'])
+        gamma = int(space['gamma'])
 
         # Choose the right tokenizer
         tokenizer = nsNLP.tokenization.NLTKTokenizer()
@@ -269,7 +272,8 @@ if __name__ == "__main__":
                 model_type=model_type,
                 direction=model_direction,
                 converter=converter,
-                word_embeddings=word_embeddings
+                word_embeddings=word_embeddings,
+                gamma=gamma
             )
 
             # For each directory
