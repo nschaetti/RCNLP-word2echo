@@ -331,6 +331,7 @@ if __name__ == "__main__":
 
             # Clean
             word_embeddings.clean('count', args.min_count)
+            xp.write(u"\t\t\tCleaned word embeddings vocabulary size: {}".format(word_embeddings.voc_size), log_level=3)
 
             # Export image of top 100 words
             word_embeddings.wordnet('count',
@@ -346,7 +347,10 @@ if __name__ == "__main__":
             word_embeddings.wordlist(os.path.join(words_directory, u"wordlist" + unicode(w_index) + u".csv"))
 
             # Measure performance
-            positioning, poss, ratio = questions_words.positioning(word_embeddings, func='inv')
+            positioning, poss, ratio = questions_words.positioning(word_embeddings, func='inv',
+                                                                   csv_file=os.path.join(words_directory,
+                                                                                     u"results" + unicode(
+                                                                                         w_index) + u".csv"))
             xp.write(u"\t\t\tPositioning: {}".format(positioning), log_level=3)
             xp.write(u"\t\t\tRatio: {}".format(ratio), log_level=3)
 
