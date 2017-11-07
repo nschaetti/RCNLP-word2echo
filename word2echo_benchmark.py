@@ -26,6 +26,7 @@ import numpy as np
 import os
 import io
 import nsNLP
+import mdp
 
 ####################################################
 # Functions
@@ -110,7 +111,7 @@ def create_directories(output_directory, xp_name):
 if __name__ == "__main__":
 
     # Argument parser
-    args = nsNLP.tools.ArgumentBuilder(desc=u"Word prediction with Echo State Network and one-hot vector")
+    args = nsNLP.tools.ArgumentBuilder(desc=u"Word prediction with Echo State Network and one-hot vector on Wikipedia dataset")
 
     # Dataset
     args.add_argument(command="--dataset", name="dataset", type=str,
@@ -142,6 +143,8 @@ if __name__ == "__main__":
                       extended=True, default="both")
     args.add_argument(command="--gamma", name="gamma", type=str, help="Gamma parameter for echo2word model", extended=True,
                       default="1")
+    args.add_argument(command="--n-threads", name="n_threads", help="Number of threads", type=int, default=1,
+                      required=False, extended=False)
 
     # Embeddings parameters
     args.add_argument(command="--voc-size", name="voc_size", help="Vocabulary size", type=int, default=5000,
@@ -163,13 +166,15 @@ if __name__ == "__main__":
                       extended=False)
     args.add_argument(command="--n-samples", name="n_samples", type=int, help="Number of different reservoir to test",
                       default=1, extended=False)
+    args.add_argument(command="--eval", name="eval", type=str, help="Evaluation function", required=False,
+                      default="linear", extended=False)
     args.add_argument(command="--verbose", name="verbose", type=int, help="Verbose level", default=2, extended=False)
 
     # Parse arguments
     args.parse()
 
     # Print precision
-    np.set_printoptions(precision=3)
+    np.set_printoptions(precision=4)
     np.set_printoptions(threshold=np.nan)
 
     # Questions-words benchmarks
@@ -273,39 +278,66 @@ if __name__ == "__main__":
                 direction=model_direction,
                 converter=converter,
                 word_embeddings=word_embeddings,
-                gamma=gamma
+                gamma=gamma,
+                n_threads=args.n_threads
             )
 
             # For each directory
             cont_add = True
             token_count = 0
-            for filename in os.listdir(args.dataset):
-                # File path
-                file_path = os.path.join(args.dataset, filename)
-
+            for subdirectory in os.listdir(args.dataset):
                 # Directory path
-                xp.write(u"\t\t\tAdding file {}".format(file_path), log_level=3)
+                directory_path = os.path.join(args.dataset, subdirectory)
 
-                # Open file
-                text_content = io.open(file_path, 'r', encoding='utf-8').read()
+                # Is DIR
+                if os.path.isdir(directory_path):
+                    # Directory path
+                    xp.write(u"\t\t\tEntering directory {}".format(directory_path), log_level=3)
 
-                # Try to add
-                try:
-                    word2echo_model.add(tokenizer(text_content))
-                except nsNLP.esn_models.converters.OneHotVectorFullException:
-                    xp.write(u"\t\t\tOne-hot vector representation is full!", log_level=3)
-                    cont_add = False
-                    break
-                    pass
-                # end try
+                    # List file
+                    for filename in os.listdir(directory_path):
+                        file_path = os.path.join(directory_path, filename)
 
-                # Display
-                xp.write(u"\t\t\t\tVocabulary size : {}".format(word2echo_model.voc_size), log_level=4)
-                xp.write(u"\t\t\t\tNumber of tokens : {}".format(word2echo_model.token_count), log_level=4)
+                        # Directory path
+                        xp.write(u"\t\t\tAdding file {}".format(file_path), log_level=3)
 
-                # Count tokens
-                if args.dataset_size != -1 and word2echo_model.token_count > args.dataset_size:
-                    cont_add = False
+                        # Open file
+                        text_content = io.open(file_path, 'r', encoding='utf-8').read()
+
+                        # For each line
+                        for line in text_content.split(u"\n"):
+                            if line != u"#" * 100 and len(line) > 1:
+                                # Try to add
+                                try:
+                                    word2echo_model.add(tokenizer(line))
+                                except nsNLP.esn_models.converters.OneHotVectorFullException:
+                                    xp.write(u"\t\t\t\tOne-hot vector representation is full!", log_level=4)
+                                    cont_add = False
+                                    break
+                                    pass
+                                # end try
+                            # end if
+
+                            # Count tokens
+                            if args.dataset_size != -1 and word2echo_model.token_count > args.dataset_size:
+                                cont_add = False
+                            # end if
+
+                            # Continue
+                            if not cont_add:
+                                break
+                            # end if
+                        # end for
+
+                        # Display
+                        xp.write(u"\t\t\t\tToken count : {}".format(word2echo_model.token_count), log_level=4)
+                        xp.write(u"\t\t\t\tVocabulary size : {}".format(word2echo_model.voc_size), log_level=4)
+
+                        # Continue
+                        if not cont_add:
+                            break
+                        # end if
+                    # end for
                 # end if
 
                 # Continue
@@ -333,11 +365,13 @@ if __name__ == "__main__":
             word_embeddings.clean('count', args.min_count)
             xp.write(u"\t\t\tCleaned word embeddings vocabulary size: {}".format(word_embeddings.voc_size), log_level=3)
 
-            # Export image of top 100 words
+            # Export image of reduced vectors with TSNE
             word_embeddings.wordnet('count',
                                     os.path.join(image_directory, u"wordnet_TSNE_" + unicode(w_index) + u".png"),
                                     n_words=args.top_words,
                                     fig_size=args.fig_size, reduction='TSNE', info=desc_info)
+
+            # Export image of reduced vectors with PCA
             word_embeddings.wordnet('count',
                                     os.path.join(image_directory, u"wordnet_PCA_" + unicode(w_index) + u".png"),
                                     n_words=args.top_words,
@@ -347,12 +381,13 @@ if __name__ == "__main__":
             word_embeddings.wordlist(os.path.join(words_directory, u"wordlist" + unicode(w_index) + u".csv"))
 
             # Measure performance
-            positioning, poss, ratio = questions_words.positioning(word_embeddings, func='inv',
-                                                                   csv_file=os.path.join(words_directory,
-                                                                                     u"results" + unicode(
-                                                                                         w_index) + u".csv"))
+            positioning, poss, ratio, ttest = questions_words.positioning(word_embeddings, func=args.eval,
+                                                                          csv_file=os.path.join(words_directory,
+                                                                                                u"results" + unicode(
+                                                                                                    w_index) + u".csv"))
             xp.write(u"\t\t\tPositioning: {}".format(positioning), log_level=3)
             xp.write(u"\t\t\tRatio: {}".format(ratio), log_level=3)
+            xp.write(u"\t\t\tTTest: {}".format(ttest * 100.0), log_level=3)
 
             # Save positioning as a fold
             for index, pos in enumerate(poss):
