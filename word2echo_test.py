@@ -71,11 +71,22 @@ if __name__ == "__main__":
     # Output parameters
     args.add_argument(command="--fig-size", name="fig_size", help="Figure size (pixels)", type=float, default=1024.0,
                       extended=False)
+    args.add_argument(command="--top-words", name="top_words", type=int,
+                      help="Number of top words (by count) to display in the wordnet picture", default=100,
+                      required=False, extended=False)
     args.add_argument(command="--min-count", name="min_count", type=int,
                       help="Minimum token count to be in the final embeddings", default=100, required=False,
                       extended=False)
     args.add_argument(command="--output", name="output", type=str, help="Experiment's output directory", required=True,
                       extended=False)
+    args.add_argument(command="--images", name="images", action='store_true', help="Output images", default=False,
+                      extended=False)
+    args.add_argument(command="--wordlist", name="wordlist", action='store_true', help="Output word list", default=False,
+                      extended=False)
+    args.add_argument(command="--positionings", name="positionings", action='store_true', help="Output positionings",
+                      default=False, extended=False)
+    args.add_argument(command="--n-threads", name="n_threads", help="Number of threads", type=int, default=1,
+                      required=False, extended=False)
 
     # Parse arguments
     args.parse()
@@ -87,7 +98,7 @@ if __name__ == "__main__":
     image_directory, words_directory = create_directories(args.output, u"")
 
     # Export word embeddings
-    word_embeddings = nsNLP.embeddings.Embeddings()
+    word_embeddings = nsNLP.embeddings.Embeddings.load(args.input)
     print(u"Word embeddings vocabulary size: {}".format(word_embeddings.voc_size))
 
     # Clean
@@ -95,27 +106,34 @@ if __name__ == "__main__":
     print(u"Cleaned word embeddings vocabulary size: {}".format(word_embeddings.voc_size))
 
     # Export image of top 100 words
-    word_embeddings.wordnet('count',
-                            os.path.join(image_directory, u"wordnet_TSNE.png"),
-                            n_words=args.top_words,
-                            fig_size=args.fig_size, reduction='TSNE')
-    word_embeddings.wordnet('count',
-                            os.path.join(image_directory, u"wordnet_PCA.png"),
-                            n_words=args.top_words,
-                            fig_size=args.fig_size, reduction='PCA')
+    if args.images:
+        word_embeddings.wordnet('count',
+                                os.path.join(image_directory, u"wordnet_TSNE.png"),
+                                n_words=args.top_words,
+                                fig_size=args.fig_size, reduction='TSNE')
+        word_embeddings.wordnet('count',
+                                os.path.join(image_directory, u"wordnet_PCA.png"),
+                                n_words=args.top_words,
+                                fig_size=args.fig_size, reduction='PCA')
+    # end if
 
     # Export list of words
-    word_embeddings.wordlist(os.path.join(words_directory, u"wordlist.csv"))
+    if args.wordlist:
+        word_embeddings.wordlist(os.path.join(words_directory, u"wordlist.csv"))
+    # end if
 
     # Measure performance
-    positioning, poss, ratio = questions_words.positioning(word_embeddings, func='inv', csv_file=os.path.join(words_directory, u"results.csv"))
-    print(u"Positioning: {}".format(positioning))
-    print(u"Ratio: {}".format(ratio))
+    if args.positionings:
+        positioning, poss, ratio, ttest = questions_words.positioning(word_embeddings, func='inv', csv_file=os.path.join(words_directory, u"results.csv"), nthreads=args.n_threads)
+        print(u"Positioning: {}".format(positioning))
+        print(u"Ratio: {}".format(ratio))
+        print(u"TTest: {}".format(ttest * 100.0))
 
-    # Save positioning as a fold
-    average = np.array([])
-    for index, pos in enumerate(poss):
-        average = np.append(average, poss)
-    # end for
-    print(u"Average positioning: {}".format(average))
+        # Save positioning as a fold
+        average = np.array([])
+        for index, pos in enumerate(poss):
+            average = np.append(average, poss)
+        # end for
+        print(u"Average positioning: {}".format(average))
+    # end if
 # end if
