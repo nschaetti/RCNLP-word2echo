@@ -278,8 +278,7 @@ if __name__ == "__main__":
                 direction=model_direction,
                 converter=converter,
                 word_embeddings=word_embeddings,
-                gamma=gamma,
-                n_threads=args.n_threads
+                gamma=gamma
             )
 
             # For each directory
@@ -356,6 +355,7 @@ if __name__ == "__main__":
 
             # Export word embeddings
             word_embeddings = word2echo_model.export_embeddings()
+            xp.write(u"\t\t\tEmbedding size : {}".format(word_embeddings.size), log_level=3)
             xp.write(u"\t\t\tWord embeddings vocabulary size: {}".format(word_embeddings.voc_size), log_level=3)
 
             # Save word embeddings object
@@ -381,10 +381,12 @@ if __name__ == "__main__":
             word_embeddings.wordlist(os.path.join(words_directory, u"wordlist" + unicode(w_index) + u".csv"))
 
             # Measure performance
-            positioning, poss, ratio, ttest = questions_words.positioning(word_embeddings, func=args.eval,
-                                                                          csv_file=os.path.join(words_directory,
-                                                                                                u"results" + unicode(
-                                                                                                    w_index) + u".csv"))
+            positioning, poss, ratio, ttest = questions_words.positioning\
+                (
+                    word_embeddings, func=args.eval,
+                    csv_file=os.path.join(words_directory,u"results" + unicode(w_index) + u".csv"),
+                    n_threads=args.n_threads
+                )
             xp.write(u"\t\t\tPositioning: {}".format(positioning), log_level=3)
             xp.write(u"\t\t\tRatio: {}".format(ratio), log_level=3)
             xp.write(u"\t\t\tTTest: {}".format(ttest * 100.0), log_level=3)
